@@ -762,11 +762,47 @@ function AddTransactionDialog({
             multisig={multisig}
             onClose={onClose}
           />
+          <SendSolListItem
+            didAddTransaction={didAddTransaction}
+            multisig={multisig}
+            onClose={onClose}
+          />
         </List>
       </DialogContent>
     </Dialog>
   );
 }
+
+function SendSolListItem({
+  multisig,
+  onClose,
+  didAddTransaction,
+}: {
+  multisig: PublicKey;
+  onClose: Function;
+  didAddTransaction: (tx: PublicKey) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <ListItem button onClick={() => setOpen((open) => !open)}>
+        <ListItemIcon>
+          <GavelIcon />
+        </ListItemIcon>
+        <ListItemText primary={"Send Sol"} />
+        {open ? <ExpandLess /> : <ExpandMore />}
+      </ListItem>
+      <Collapse in={open} timeout="auto" unmountOnExit>
+        <SendSolListItemDetails
+          didAddTransaction={didAddTransaction}
+          multisig={multisig}
+          onClose={onClose}
+        />
+      </Collapse>
+    </>
+  );
+}
+
 
 function ChangeThresholdListItem({
   multisig,
@@ -795,6 +831,120 @@ function ChangeThresholdListItem({
         />
       </Collapse>
     </>
+  );
+}
+
+function SendSolListItemDetails({
+  multisig,
+  onClose,
+  didAddTransaction,
+}: {
+  multisig: PublicKey;
+  onClose: Function;
+  didAddTransaction: (tx: PublicKey) => void;
+}) {
+  const [lamports, setLamports] = useState(10);
+  const zeroAddr = new PublicKey("11111111111111111111111111111111").toString();
+  const [destinationAddress, setDestinationAddress] = useState(zeroAddr);
+  const { multisigClient } = useWallet();
+  // @ts-ignore
+  const { enqueueSnackbar } = useSnackbar();
+  const sendSol = async () => {
+    enqueueSnackbar("Sending SOL", {
+      variant: "info",
+    });
+    const destination = new PublicKey(destinationAddress);
+    const data = sendSolData(multisigClient, destination, lamports);
+    // const data = setOwnersData(multisigClient, [destination]);
+    const [multisigSigner] = await PublicKey.findProgramAddress(
+      [multisig.toBuffer()],
+      multisigClient.programId
+    );
+
+    const accounts = [
+      {
+        pubkey: multisig,
+        isWritable: true,
+        isSigner: false,
+      },
+      {
+        pubkey: multisigSigner,
+        isWritable: false,
+        isSigner: true
+      }
+    ];
+    const txSize = 1000;
+    const transaction = new Account();
+    const tx = await multisigClient.rpc.createTransaction(
+      multisigClient.programId,
+      accounts,
+      data,
+      {
+        accounts: {
+          multisig,
+          transaction: transaction.publicKey,
+          proposer: multisigClient.provider.wallet.publicKey,
+          rent: SYSVAR_RENT_PUBKEY,
+        },
+        signers: [transaction],
+        instructions: [
+          await multisigClient.account.transaction.createInstruction(
+            transaction,
+            // @ts-ignore
+            txSize
+          ),
+        ],
+      }
+    );
+    enqueueSnackbar("Transaction created", {
+      variant: "success",
+      action: <ViewTransactionOnExplorerButton signature={tx} />,
+    });
+    didAddTransaction(transaction.publicKey);
+    onClose();
+  };  
+
+  return (
+    <div
+      style={{
+        background: "#f1f0f0",
+        paddingLeft: "24px",
+        paddingRight: "24px",
+      }}
+    >
+      <TextField
+        fullWidth
+        style={{ marginTop: "16px" }}
+        label="Lamports"
+        value={lamports}
+        type="number"
+        onChange={(e) => {
+          // @ts-ignore
+          setLamports(e.target.value);
+        }}
+      />
+      <TextField
+        style={{ marginTop: "16px" }}
+        fullWidth
+        label="Destination Address"
+        value={destinationAddress}
+        onChange={(e) => {
+          setDestinationAddress(e.target.value);
+        }}
+      />
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          marginTop: "16px",
+          paddingBottom: "16px",
+        }}
+      >
+        <Button onClick={() => sendSol()}>
+          Send SOL
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -1360,6 +1510,12 @@ function setOwnersData(multisigClient, owners) {
   return multisigClient.coder.instruction.encode("set_owners", {
     owners,
   });
+}
+
+// @ts-ignore
+function sendSolData(multisigClient, destination, amount) {
+  return multisigClient.coder.instruction.encode("send_sol", destination);
+    // destination, amount,
 }
 
 

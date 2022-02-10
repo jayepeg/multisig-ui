@@ -36,6 +36,27 @@ const idl: Idl = {
       ],
     },
     {
+      name: "sendSol",
+      accounts: [
+        {
+          name: "multisig",
+          isMut: true,
+          isSigner: false,
+        },
+        {
+          name: "multisigSigner",
+          isMut: false,
+          isSigner: true,
+        },
+      ],
+      args: [
+        {
+          name: "destination",
+          type: "publicKey",
+        },
+      ],
+    },
+    {
       name: "createTransaction",
       accounts: [
         {
